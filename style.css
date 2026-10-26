@@ -1,0 +1,128 @@
+/* Copyright (C) 2026 Aron Sommer. See LICENSE file for full license details. */
+
+:root {
+  --muted: #666;
+  --meaning: #1a5fb4;
+}
+
+body {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px;
+  font:
+    18px/1.4 system-ui,
+    sans-serif;
+  background: #fff;
+  color: #000;
+}
+
+h1 {
+  font-size: 24px;
+}
+
+a {
+  color: inherit;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+.box {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 200px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  font:
+    16px/1.4 ui-monospace,
+    Menlo,
+    Consolas,
+    monospace;
+  background: none;
+  color: inherit;
+}
+
+textarea.box {
+  resize: vertical;
+}
+
+/* Long lines scroll instead of breaking the alignment. */
+pre.box {
+  overflow-x: auto;
+}
+
+/* Keeps a line with its rows on one printed page. */
+#out .block {
+  display: block;
+  break-inside: avoid;
+}
+
+#out .word {
+  font-weight: bold;
+}
+
+#out .meaning {
+  color: var(--meaning);
+}
+
+#out .base {
+  color: var(--muted);
+}
+
+#out .translation {
+  font-style: italic;
+}
+
+pre.box:empty::before {
+  content: "The translation appears here";
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0;
+}
+
+#key {
+  flex: 1;
+  min-width: 160px;
+}
+
+#status {
+  color: var(--muted);
+}
+
+/* Only the translation is printed, all in black. */
+@media print {
+  :root {
+    --meaning: #000;
+    --muted: #000;
+  }
+
+  body > :not(#out) {
+    display: none;
+  }
+
+  body {
+    container-type: inline-size;
+    max-width: none;
+    padding: 0;
+  }
+
+  pre.box {
+    border: none;
+    padding: 0;
+    overflow: visible;
+    /* Shrinks so the longest line fits; a monospace character is about 0.61 of the font size wide. */
+    font-size: min(13px, 100cqi / (var(--chars, 1) * 0.61));
+  }
+}

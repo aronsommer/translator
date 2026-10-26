@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Copyright (C) 2026 Aron Sommer. See LICENSE file for full license details. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Translator</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <h1>Translator</h1>
+    <div class="row">
+      <input id="key" type="password" placeholder="Gemini API key" autocomplete="off" />
+      <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener"
+        >Get a free key</a
+      >
+    </div>
+    <form id="form">
+      <textarea
+        id="text"
+        class="box"
+        placeholder="Paste text in a language that separates words with spaces"
+        spellcheck="false"
+        required
+      ></textarea>
+      <div class="row">
+        <label>
+          Translate into
+          <select id="target"></select>
+        </label>
+        <label>
+          Model
+          <select id="model"></select>
+        </label>
+        <button id="go">Translate</button>
+      </div>
+    </form>
+    <div class="row">
+      <button id="copy" type="button">Copy</button>
+      <button id="print" type="button">Print</button>
+      <label><input id="showTranslation" type="checkbox" checked /> Translation</label>
+      <label><input id="showMeaning" type="checkbox" checked /> Word by word</label>
+      <label><input id="showBase" type="checkbox" checked /> Base forms</label>
+      <span id="status"></span>
+    </div>
+    <pre id="out" class="box"></pre>
+  </body>
+</html>
