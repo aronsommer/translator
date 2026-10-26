@@ -1,5 +1,7 @@
 # Translator
 
+**[aronsommer.github.io/translator](https://aronsommer.github.io/translator/)**
+
 Paste text in a language that separates words with spaces and get every word with its literal meaning and base form right below it, followed by a natural translation of each line, ready to copy or print. Each of the three can be shown or hidden.
 
 ## How it works
