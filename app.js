@@ -10,12 +10,18 @@ const MODELS = {
 // Characters per output line, so it fits the output box on a desktop screen.
 const WIDTH = 96;
 const LANGUAGES = [
+  "Arabic",
+  "Chinese (Simplified, 简体中文)",
+  "Chinese (Traditional, 繁體中文)",
   "Czech",
   "Dutch",
   "English",
   "French",
   "German",
+  "Hindi",
   "Italian",
+  "Japanese",
+  "Korean",
   "Polish",
   "Portuguese",
   "Russian",
