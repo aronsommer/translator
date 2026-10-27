@@ -25,6 +25,18 @@ const LANGUAGES = [
 ];
 // The class of each field of a word: the word, its meaning and its base form.
 const FIELDS = ["word", "meaning", "base"];
+// Scripts written without spaces between words, which are split by a dictionary instead.
+const SPACELESS =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+// A character two columns wide.
+const WIDE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff01-\uff60\uffe0-\uffe6]/u;
+// A character without width of its own, like a mark above or below a letter.
+const ZERO_WIDTH = /[\p{Mn}\p{Me}\p{Cf}]/u;
+// A run of text in scripts the monospace fonts lack, so a fallback font draws it.
+const FALLBACK =
+  /((?:(?:[^\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Common}\p{Script=Inherited}]|[\u3000-\u303f\uff01-\uff60\uffe0-\uffe6])\p{M}*)+)/u;
 
 const $ = (id) => document.getElementById(id);
 const [
@@ -118,10 +130,7 @@ form.onsubmit = async (event) => {
   lines = [];
   render();
   // Each line as its words, so the words shown are exactly the ones pasted.
-  const pasted = text.value
-    .trim()
-    .split("\n")
-    .map((line) => line.split(/\s+/).filter(Boolean));
+  const pasted = text.value.trim().split("\n").map(split);
   const filled = pasted.filter((words) => words.length);
   try {
     const ai = new GoogleGenAI({ apiKey: key.value.trim() });
@@ -139,17 +148,20 @@ form.onsubmit = async (event) => {
               type: "array",
               minItems: filled.length,
               maxItems: filled.length,
-              items: {
+              // Each line gets exactly as many entries as it has words.
+              prefixItems: filled.map((words) => ({
                 type: "object",
                 properties: {
                   words: {
                     type: "array",
+                    minItems: words.length,
+                    maxItems: words.length,
                     items: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
                   },
                   translation: { type: "string" },
                 },
                 required: ["words", "translation"],
-              },
+              })),
             },
           },
           required: ["lines"],
@@ -157,7 +169,7 @@ form.onsubmit = async (event) => {
       },
     });
     const glossed = JSON.parse(response.text).lines;
-    // The schema leaves the number of words per line open, so it is checked here.
+    // A safeguard, should the model not keep to the schema.
     if (filled.some((words, i) => glossed[i]?.words.length !== words.length))
       throw new Error("The meanings do not match the words, please try again");
     // Writing each word keeps the model's meanings on the right words, but the pasted words are shown.
@@ -182,6 +194,30 @@ form.onsubmit = async (event) => {
   go.disabled = false;
 };
 
+// Splits a line at spaces, and text in scripts without spaces into its words, each keeping its punctuation.
+function split(line) {
+  return line
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((token) => {
+      if (!SPACELESS.test(token)) return [token];
+      const words = [];
+      let lead = "";
+      // Opening marks and currency signs go with the next word, other punctuation with the last.
+      for (const { segment, isWordLike } of segmenter.segment(token)) {
+        if (isWordLike) {
+          words.push(lead + segment);
+          lead = "";
+        } else if (words.length && !/^[\p{Ps}\p{Pi}\p{Sc}]/u.test(segment))
+          words[words.length - 1] += segment;
+        else lead += segment;
+      }
+      // A token of punctuation only stays a word.
+      if (lead) words.push(lead);
+      return words;
+    });
+}
+
 // A word without case and outer punctuation, to leave out base forms that equal their word.
 function bare(word) {
   return word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").toLocaleLowerCase();
@@ -192,7 +228,7 @@ function render() {
   out.replaceChildren();
   const fields = [0, showMeaning.checked && 1, showBase.checked && 2].filter(Number.isInteger);
   const stacked = fields.length > 1;
-  const width = (word) => Math.max(...fields.map((f) => word[f].length));
+  const width = (word) => Math.max(...fields.map((f) => columns(word[f])));
   for (const line of lines) {
     // An empty line in the text stays an extra gap.
     if (!line) {
@@ -212,18 +248,17 @@ function render() {
             block,
             FIELDS[f],
             row
-              .map((word) => word[f].padEnd(width(word)))
+              .map((word) => word[f] + " ".repeat(width(word) - columns(word[f])))
               .join("  ")
               .trimEnd(),
           );
     });
     const translation = line.translation.split(/\s+/).filter(Boolean);
     if (showTranslation.checked && translation.length)
-      for (const row of wrap(translation, (word) => word.length, 1))
-        add(block, "translation", row.join(" "));
+      for (const row of wrap(translation, columns, 1)) add(block, "translation", row.join(" "));
   }
   // The print style fits the longest line to the page.
-  const longest = Math.max(...out.textContent.split("\n").map((line) => line.length));
+  const longest = Math.max(...out.textContent.split("\n").map(columns));
   out.style.setProperty("--chars", longest);
 }
 
@@ -242,9 +277,23 @@ function wrap(items, width, gap) {
   return rows;
 }
 
+// The number of monospace columns a text takes.
+function columns(text) {
+  let count = 0;
+  for (const char of text) count += WIDE.test(char) ? 2 : ZERO_WIDTH.test(char) ? 0 : 1;
+  return count;
+}
+
 function add(parent, className, text) {
   const node = document.createElement("span");
   node.className = className;
-  node.textContent = text;
+  // Text from a fallback font gets a box of its columns, so the text after it stays on the grid.
+  text.split(FALLBACK).forEach((part, i) => {
+    if (i % 2 === 0) return node.append(part);
+    const box = node.appendChild(document.createElement("span"));
+    box.className = "fallback";
+    box.style.width = `${columns(part)}ch`;
+    box.textContent = part;
+  });
   parent.append(node, "\n");
 }
