@@ -7,6 +7,8 @@ const MODELS = {
   "gemini-3.5-flash-lite": { temperature: 0 },
   "gemini-3.6-flash": {},
 };
+// Lines per request, as Gemini rejects a too large schema; 13 lines worked, about 70 did not.
+const CHUNK = 15;
 // Characters per output line, so it fits the output box on a desktop screen.
 const WIDTH = 96;
 const LANGUAGES = [
@@ -140,41 +142,52 @@ form.onsubmit = async (event) => {
   const filled = pasted.filter((words) => words.length);
   try {
     const ai = new GoogleGenAI({ apiKey: key.value.trim() });
-    const response = await ai.models.generateContent({
-      model: model.value,
-      contents: JSON.stringify(filled),
-      config: {
-        ...MODELS[model.value],
-        systemInstruction: `The text is a JSON array of lines, each an array of its words. For each line, list every word in order as [word, meaning, base form]: the word as given, its literal meaning in ${target.value} in that context with the word's punctuation, and its dictionary form in the text's language. Then translate the line into natural ${target.value}.`,
-        responseMimeType: "application/json",
-        responseJsonSchema: {
-          type: "object",
-          properties: {
-            lines: {
-              type: "array",
-              minItems: filled.length,
-              maxItems: filled.length,
-              // Each line gets exactly as many entries as it has words.
-              prefixItems: filled.map((words) => ({
-                type: "object",
-                properties: {
-                  words: {
-                    type: "array",
-                    minItems: words.length,
-                    maxItems: words.length,
-                    items: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
-                  },
-                  translation: { type: "string" },
+    const chunks = [];
+    for (let i = 0; i < filled.length; i += CHUNK) chunks.push(filled.slice(i, i + CHUNK));
+    const responses = await Promise.all(
+      chunks.map((chunk) =>
+        ai.models.generateContent({
+          model: model.value,
+          contents: JSON.stringify({ text: text.value.trim(), lines: chunk }),
+          config: {
+            ...MODELS[model.value],
+            systemInstruction: `The input is a JSON object of a whole text and some of its lines, each an array of its words. For each of these lines, list every word in order as [word, meaning, base form]: the word as given, its literal meaning in ${target.value} in that context with the word's punctuation, and its dictionary form in the text's language. Then translate the line into natural ${target.value}, in the context of the whole text, with the line's first-letter case and end punctuation.`,
+            responseMimeType: "application/json",
+            responseJsonSchema: {
+              type: "object",
+              properties: {
+                lines: {
+                  type: "array",
+                  minItems: chunk.length,
+                  maxItems: chunk.length,
+                  // Each line gets exactly as many entries as it has words.
+                  prefixItems: chunk.map((words) => ({
+                    type: "object",
+                    properties: {
+                      words: {
+                        type: "array",
+                        minItems: words.length,
+                        maxItems: words.length,
+                        items: {
+                          type: "array",
+                          items: { type: "string" },
+                          minItems: 3,
+                          maxItems: 3,
+                        },
+                      },
+                      translation: { type: "string" },
+                    },
+                    required: ["words", "translation"],
+                  })),
                 },
-                required: ["words", "translation"],
-              })),
+              },
+              required: ["lines"],
             },
           },
-          required: ["lines"],
-        },
-      },
-    });
-    const glossed = JSON.parse(response.text).lines;
+        }),
+      ),
+    );
+    const glossed = responses.flatMap((response) => JSON.parse(response.text).lines);
     // A safeguard, should the model not keep to the schema.
     if (filled.some((words, i) => glossed[i]?.words.length !== words.length))
       throw new Error("The meanings do not match the words, please try again");
